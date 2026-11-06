@@ -39,6 +39,7 @@ struct nilfs_iget_args {
 };
 
 static int nilfs_iget_test(struct inode *inode, void *opaque);
+static int nilfs_truncate(struct inode *inode);
 
 void nilfs_inode_add_blocks(struct inode *inode, int n)
 {
@@ -771,38 +772,35 @@ failed:
 		   ret, ii->vfs_inode.i_ino);
 }
 
-void nilfs_truncate(struct inode *inode)
+static int nilfs_truncate(struct inode *inode)
 {
 	unsigned long blkoff;
 	unsigned int blocksize;
 	struct nilfs_transaction_info ti;
 	struct super_block *sb = inode->i_sb;
 	struct nilfs_inode_info *ii = NILFS_I(inode);
+	int err;
 
 	if (!test_bit(NILFS_I_BMAP, &ii->i_state))
-		return;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		return;
+		return -EINVAL;
 
 	blocksize = sb->s_blocksize;
 	blkoff = (inode->i_size + blocksize - 1) >> sb->s_blocksize_bits;
 	nilfs_transaction_begin(sb, &ti, 0); /* never fails */
 
-	block_truncate_page(inode->i_mapping, inode->i_size, nilfs_get_block);
+	err = block_truncate_page(inode->i_mapping, inode->i_size,
+				nilfs_get_block);
+	if (unlikely(err)) {
+		nilfs_transaction_abort(sb);
+		return err;
+	}
 
 	nilfs_truncate_bmap(ii, blkoff);
-
-	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
-	if (IS_SYNC(inode))
-		nilfs_set_transaction_flag(NILFS_TI_SYNC);
 
 	nilfs_mark_inode_dirty(inode);
 	nilfs_set_file_dirty(inode, 0);
 	nilfs_transaction_commit(sb);
-	/*
-	 * May construct a logical segment and may fail in sync mode.
-	 * But truncate has no return value.
-	 */
+	return 0;
 }
 
 static void nilfs_clear_inode(struct inode *inode)
@@ -884,6 +882,7 @@ int nilfs_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 	struct nilfs_transaction_info ti;
 	struct inode *inode = d_inode(dentry);
 	struct super_block *sb = inode->i_sb;
+	loff_t oldsize;
 	int err;
 
 	err = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
@@ -895,10 +894,59 @@ int nilfs_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 		return err;
 
 	if ((iattr->ia_valid & ATTR_SIZE) &&
-	    iattr->ia_size != i_size_read(inode)) {
+		iattr->ia_size != (oldsize = i_size_read(inode))) {
+
+		if (IS_APPEND(inode) || IS_IMMUTABLE(inode)) {
+			err = -EPERM;
+			goto out_err;
+		}
+
+		/*
+		 * Reject non-regular files explicitly.  While standard VFS
+		 * entry points (e.g. vfs_truncate) enforce S_ISREG, the caller
+		 * notify_change() can be invoked directly by stackable
+		 * filesystems, etc.
+		 */
+		if (!likely(S_ISREG(inode->i_mode))) {
+			err = -EINVAL;
+			goto out_err;
+		}
+
 		inode_dio_wait(inode);
+
+		/*
+		 * truncate_setsize() updates i_size and, upon size extension,
+		 * zero-fills post-EOF page data if a block exists beyond the
+		 * old EOF in the page.
+		 */
 		truncate_setsize(inode, iattr->ia_size);
-		nilfs_truncate(inode);
+
+		if (iattr->ia_size < oldsize) {
+			/*
+			 * Zero the post-EOF portion of the boundary block
+			 * (if exists) and truncate blocks beyond the new EOF.
+			 */
+			err = nilfs_truncate(inode);
+		} else if (oldsize & (sb->s_blocksize - 1)) {
+			/*
+			 * Zero the unaligned post-EOF portion of the boundary
+			 * block, which VFS skips when the extension stays
+			 * within the same block or no block exists beyond
+			 * the old EOF in the page.
+			 */
+			err = block_truncate_page(inode->i_mapping, oldsize,
+						nilfs_get_block);
+			if (likely(!err))
+				nilfs_set_file_dirty(inode, 1);
+		}
+		if (unlikely(err)) {
+			i_size_write(inode, oldsize);
+			goto out_err;
+		}
+
+		inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+		if (IS_SYNC(inode))
+			nilfs_set_transaction_flag(NILFS_TI_SYNC);
 	}
 
 	setattr_copy(&nop_mnt_idmap, inode, iattr);
