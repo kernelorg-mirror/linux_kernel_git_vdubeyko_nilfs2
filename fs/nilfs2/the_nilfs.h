@@ -86,6 +86,9 @@ enum {
  * @ns_inode_size: size of on-disk inode
  * @ns_first_ino: first not-special inode number
  * @ns_crc_seed: seed value of CRC32 calculation
+ * @ns_feature_compat: compat feature flags
+ * @ns_feature_compat_ro: read-only compat feature flags
+ * @ns_feature_incompat: incompat feature flags
  * @ns_dev_kobj: /sys/fs/<nilfs>/<device>
  * @ns_dev_kobj_unregister: completion state
  * @ns_dev_subgroups: <device> subgroups pointer
@@ -178,6 +181,9 @@ struct the_nilfs {
 	int			ns_inode_size;
 	unsigned int		ns_first_ino;
 	u32			ns_crc_seed;
+	__u64			ns_feature_compat;
+	__u64			ns_feature_compat_ro;
+	__u64			ns_feature_incompat;
 
 	/* /sys/fs/<nilfs>/<device> */
 	struct kobject ns_dev_kobj;
