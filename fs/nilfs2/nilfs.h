@@ -27,7 +27,6 @@
  * @i_state: dynamic state flags
  * @i_bmap: pointer on i_bmap_data
  * @i_bmap_data: raw block mapping
- * @i_xattr: <TODO>
  * @i_dir_start_lookup: page index of last successful search
  * @i_cno: checkpoint number for GC inode
  * @i_assoc_inode: associated inode (B-tree node cache holder or back pointer)
@@ -43,7 +42,6 @@ struct nilfs_inode_info {
 	unsigned long  i_state;		/* Dynamic state flags */
 	struct nilfs_bmap *i_bmap;
 	struct nilfs_bmap i_bmap_data;
-	__u64 i_xattr;	/* sector_t ??? */
 	__u32 i_dir_start_lookup;
 	__u64 i_cno;		/* check point number for GC inode */
 	struct inode *i_assoc_inode;
@@ -233,8 +231,6 @@ static inline int nilfs_init_acl(struct inode *inode, struct inode *dir)
 	return 0;
 }
 #endif
-
-#define NILFS_ATIME_DISABLE
 
 /* Flags that should be inherited by new inodes from their parent. */
 #define NILFS_FL_INHERITED						\

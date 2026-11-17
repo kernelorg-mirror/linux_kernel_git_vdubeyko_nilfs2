@@ -20,7 +20,7 @@ config NILFS2_FS
 	  snapshot is mountable as a read-only file system concurrently with
 	  its writable mount, and this feature is convenient for online backup.
 
-	  Some features including atime, extended attributes, and POSIX ACLs,
+	  Some features including extended attributes, and POSIX ACLs,
 	  are not supported yet.
 
 	  To compile this file system support as a module, choose M here: the

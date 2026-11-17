@@ -387,6 +387,7 @@ void nilfs_set_inode_flags(struct inode *inode)
 int nilfs_read_inode_common(struct inode *inode,
 			    struct nilfs_inode *raw_inode)
 {
+	struct the_nilfs *nilfs = inode->i_sb->s_fs_info;
 	struct nilfs_inode_info *ii = NILFS_I(inode);
 	int err;
 
@@ -395,8 +396,12 @@ int nilfs_read_inode_common(struct inode *inode,
 	i_gid_write(inode, le32_to_cpu(raw_inode->i_gid));
 	set_nlink(inode, le16_to_cpu(raw_inode->i_links_count));
 	inode->i_size = le64_to_cpu(raw_inode->i_size);
-	inode_set_atime(inode, le64_to_cpu(raw_inode->i_mtime),
-			le32_to_cpu(raw_inode->i_mtime_nsec));
+	if (nilfs->ns_feature_compat_ro & NILFS_FEATURE_COMPAT_RO_ATIME)
+		inode_set_atime(inode, le64_to_cpu(raw_inode->i_atime),
+				le32_to_cpu(raw_inode->i_atime_nsec));
+	else
+		inode_set_atime(inode, le64_to_cpu(raw_inode->i_mtime),
+				le32_to_cpu(raw_inode->i_mtime_nsec));
 	inode_set_ctime(inode, le64_to_cpu(raw_inode->i_ctime),
 			le32_to_cpu(raw_inode->i_ctime_nsec));
 	inode_set_mtime(inode, le64_to_cpu(raw_inode->i_mtime),
@@ -702,8 +707,10 @@ void nilfs_write_inode_common(struct inode *inode,
 	raw_inode->i_gid = cpu_to_le32(i_gid_read(inode));
 	raw_inode->i_links_count = cpu_to_le16(inode->i_nlink);
 	raw_inode->i_size = cpu_to_le64(inode->i_size);
+	raw_inode->i_atime = cpu_to_le64(inode_get_atime_sec(inode));
 	raw_inode->i_ctime = cpu_to_le64(inode_get_ctime_sec(inode));
 	raw_inode->i_mtime = cpu_to_le64(inode_get_mtime_sec(inode));
+	raw_inode->i_atime_nsec = cpu_to_le32(inode_get_atime_nsec(inode));
 	raw_inode->i_ctime_nsec = cpu_to_le32(inode_get_ctime_nsec(inode));
 	raw_inode->i_mtime_nsec = cpu_to_le32(inode_get_mtime_nsec(inode));
 	raw_inode->i_blocks = cpu_to_le64(inode->i_blocks);

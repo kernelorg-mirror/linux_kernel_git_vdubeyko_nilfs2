@@ -930,8 +930,6 @@ static void nilfs_write_root_mdt_inode(struct inode *inode,
 	nilfs_write_inode_common(inode, raw_inode);
 
 	/* zero-fill unused portion of raw_inode */
-	raw_inode->i_xattr = 0;
-	raw_inode->i_pad = 0;
 	memset((void *)raw_inode + sizeof(*raw_inode), 0,
 	       nilfs->ns_inode_size - sizeof(*raw_inode));
 

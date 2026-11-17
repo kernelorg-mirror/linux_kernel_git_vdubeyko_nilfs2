@@ -863,11 +863,6 @@ int nilfs_store_magic(struct super_block *sb,
 
 	sb->s_magic = le16_to_cpu(sbp->s_magic);
 
-	/* FS independent flags */
-#ifdef NILFS_ATIME_DISABLE
-	sb->s_flags |= SB_NOATIME;
-#endif
-
 	nilfs->ns_resuid = le16_to_cpu(sbp->s_def_resuid);
 	nilfs->ns_resgid = le16_to_cpu(sbp->s_def_resgid);
 	nilfs->ns_interval = le32_to_cpu(sbp->s_c_interval);
@@ -875,6 +870,9 @@ int nilfs_store_magic(struct super_block *sb,
 	nilfs->ns_feature_compat = le64_to_cpu(sbp->s_feature_compat);
 	nilfs->ns_feature_compat_ro = le64_to_cpu(sbp->s_feature_compat_ro);
 	nilfs->ns_feature_incompat = le64_to_cpu(sbp->s_feature_incompat);
+
+	if (!(nilfs->ns_feature_compat_ro & NILFS_FEATURE_COMPAT_RO_ATIME))
+		sb->s_flags |= SB_NOATIME;
 
 	return 0;
 }
